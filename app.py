@@ -363,55 +363,100 @@ with tab1:
 
 with tab2:
     st.subheader("Image Analysis")
-    
-    if st.session_state.processed and st.session_state.image_paths:
-        # Image selection grid
-        st.write("Select an image to analyze:")
-        cols = st.columns(4)
-        for idx, img_path in enumerate(st.session_state.image_paths[:4]):
-            with cols[idx % 4]:
-                try:
-                    img = Image.open(img_path)
-                    st.image(img, use_container_width=True)
-                    if st.button(f"Select Image {idx+1}", key=f"img_btn_{idx}"):
-                        st.session_state.selected_img = img_path
-                        st.session_state.image_chat_history = []
-                except Exception as e:
-                    st.warning(f"Couldn't display image {idx+1}: {str(e)}")
-        
-        # Selected image display and chat
+
+    # Image selection and display at the top
+    img_col, _ = st.columns([1, 3])
+    with img_col:
         if st.session_state.selected_img:
             try:
                 selected_img = Image.open(st.session_state.selected_img)
-                with st.expander("Selected Image", expanded=True):
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.image(selected_img, use_container_width=True)
-                    with col2:
-                        if st.button("Clear Selection"):
-                            st.session_state.selected_img = None
-                            st.rerun()
                 
-                # Image chat
-                image_chat_container = st.container()
-                user_image_input = st.text_input("Ask about the image:", key="image_input")
-                
-                if st.button("Send", key="image_send") and user_image_input:
-                    st.session_state.image_chat_history.append(HumanMessage(content=user_image_input))
-                    with st.spinner("Analyzing image..."):
-                        answer = ask_gemini(
-                            user_image_input, 
-                            img_path=st.session_state.selected_img, 
-                            context=st.session_state.text
-                        )
-                        st.session_state.image_chat_history.append(AIMessage(content=answer))
-                
-                render_chat(image_chat_container, st.session_state.image_chat_history)
-            
+                with st.expander("Image Enhancement Options"):
+                    enhance = st.checkbox("Enhance Image Quality", value=True)
+                    contrast = st.slider("Adjust Contrast", 0.5, 2.0, 1.0)
+                    sharpness = st.slider("Adjust Sharpness", 0.0, 2.0, 1.0)
+                    
+                    if enhance:
+                        enhancer = ImageEnhance.Contrast(selected_img)
+                        selected_img = enhancer.enhance(contrast)
+                        enhancer = ImageEnhance.Sharpness(selected_img)
+                        selected_img = enhancer.enhance(sharpness)
+                st.image(selected_img, 
+                         caption="Selected Image", 
+                         use_container_width=True,
+                         output_format="PNG")
+                with io.BytesIO() as buffer:
+                    selected_img.save(buffer, format="PNG", quality=IMAGE_QUALITY)
+                    st.download_button(
+                        label="Download Enhanced Image",
+                        data=buffer.getvalue(),
+                        file_name="enhanced_image.png",
+                        mime="image/png"
+                    )
             except Exception as e:
                 st.error(f"Error loading selected image: {str(e)}")
+        else:
+            st.info("No image selected")
+
+    if st.session_state.selected_img:
+        image_chat_container = st.container()
+        render_chat(image_chat_container, st.session_state.image_chat_history)
+
+        # Input section at the bottom
+        input_col = st.container()
+        with input_col:
+            st.write("**Ask about the image**")
+            user_image_input = st.text_input(
+                "Ask about the image:", 
+                key="image_input", 
+                placeholder="Type your question here...",
+                label_visibility="collapsed",
+                disabled=not st.session_state.selected_img
+            )
+            image_send_button = st.button("Send", key="image_send", disabled=not st.session_state.selected_img)
+        
+        # Handle user input and generate responses
+        if image_send_button and user_image_input:
+            st.session_state.image_chat_history.append(HumanMessage(content=user_image_input))
+            if user_image_input.lower() == 'close the chat':
+                st.stop()
+            
+            with st.spinner("Analyzing image..."):
+                answer = ask_gemini(
+                    user_image_input, 
+                    img_path=st.session_state.selected_img, 
+                    context=st.session_state.text
+                )
+                st.session_state.image_chat_history.append(AIMessage(content=answer))
+                st.session_state.scroll = True
+                st.rerun()
+
+    if st.session_state.processed and st.session_state.image_paths:
+        st.divider()
+        st.write("Select an image to analyze:")
+        num_cols = 4
+        image_paths = st.session_state.image_paths
+        rows = (len(image_paths) + num_cols - 1) // num_cols
+        
+        for row in range(rows):
+            cols = st.columns(num_cols)
+            for col_idx in range(num_cols):
+                img_idx = row * num_cols + col_idx
+                if img_idx < len(image_paths):
+                    img_path = image_paths[img_idx]
+                    with cols[col_idx]:
+                        try:
+                            img = Image.open(img_path)
+                            if not is_blank_image(img):  # Only display non-blank images
+                                st.image(img, use_container_width=True, output_format="PNG")
+                                if st.button(f"Select {img_idx+1}", key=f"btn_{img_idx}"):
+                                    st.session_state.selected_img = img_path
+                                    st.session_state.image_chat_history = []  # Clear chat when new image selected
+                                    st.rerun()
+                        except Exception as e:
+                            st.error(f"Error loading image: {str(e)}")
     else:
-        st.info("No images found in the document or document not processed yet.")
+        st.write("No images found in the document.")
 
 with tab3:
     st.subheader("General Chat")
