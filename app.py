@@ -348,13 +348,7 @@ with tab1:
     st.subheader("Text Analysis")
     
     if not st.session_state.get("processed", False):
-        st.text_area(
-            "Enter or paste text for analysis:",
-            key="raw_text_input",
-            height=200,
-            label_visibility="visible"
-        )
-        st.info("Please process or upload text to continue.")
+        st.info("Please upload or process text before starting the analysis.")
     else:
         with st.expander("View Extracted Text"):
             st.text_area("Extracted Text", st.session_state.text, height=200, label_visibility="collapsed")
@@ -369,6 +363,7 @@ with tab1:
                 st.session_state.text_chat_history.append(AIMessage(content=answer))
         
         render_chat(text_chat_container, st.session_state.text_chat_history)
+
 
 with tab2:
     st.subheader("Image Analysis")
