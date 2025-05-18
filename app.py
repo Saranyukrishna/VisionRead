@@ -355,14 +355,24 @@ with tab1:
         
         text_chat_container = st.container()
         user_text_input = st.text_input("Ask about the text content:", key="text_input", label_visibility="collapsed")
+        send_button = st.button("Send", key="text_send")
         
-        if st.button("Send", key="text_send") and user_text_input:
+        if send_button and user_text_input:
             st.session_state.text_chat_history.append(HumanMessage(content=user_text_input))
+            # Clear input to prevent repeats
+            st.session_state["text_input"] = ""
+            
             with st.spinner("Analyzing text..."):
-                answer = ask_gemini(user_text_input, context=st.session_state.text)
+                try:
+                    answer = ask_groq(user_text_input, context=st.session_state.text)
+                except Exception as e:
+                    answer = f"⚠️ Error: {e}"
+                
                 st.session_state.text_chat_history.append(AIMessage(content=answer))
+            st.experimental_rerun()  # rerun to update UI immediately
         
         render_chat(text_chat_container, st.session_state.text_chat_history)
+
 
 
 with tab2:
