@@ -36,35 +36,34 @@ except Exception as e:
     st.error(f"Failed to initialize API clients: {str(e)}")
     st.stop()
 
-MAX_PIXELS=1568 * 1568
-SUPPORTED_TYPES=["pdf", "docx", "pptx"]
-GEMINI_MODEL="gemini-1.5-flash"
-IMAGE_QUALITY=95
+MAX_PIXELS = 1568 * 1568
+SUPPORTED_TYPES = ["pdf", "docx", "pptx"]
+GEMINI_MODEL = "gemini-1.5-flash"
+IMAGE_QUALITY = 95
 
-# Temporarily store files in streamlit server
-OUTPUT_DIR=Path(tempfile.mkdtemp())
-IMAGES_DIR=OUTPUT_DIR /"images"
-TEXT_FILE=OUTPUT_DIR /"extracted_text.txt"
+# Temporarily store files in Streamlit server
+OUTPUT_DIR = Path(tempfile.mkdtemp())
+IMAGES_DIR = OUTPUT_DIR / "images"
+TEXT_FILE = OUTPUT_DIR / "extracted_text.txt"
 
-# Remove the existing files after the clear of the session
 def cleanup():
     if OUTPUT_DIR.exists():
         shutil.rmtree(OUTPUT_DIR)
 
-BLANK_IMAGE_THRESHOLD=0.95
+BLANK_IMAGE_THRESHOLD = 0.95
 def is_blank_image(pil_image, threshold=BLANK_IMAGE_THRESHOLD):
-    if pil_image.mode!='RGB':
+    if pil_image.mode != 'RGB':
         pil_image = pil_image.convert('RGB')
     img_array = np.array(pil_image)
     dark_pixels = np.sum((img_array[:,:,0] < 50) &
-                        (img_array[:,:,1] < 50) &
-                        (img_array[:,:,2] < 50))
+                  (img_array[:,:,1] < 50) &
+                  (img_array[:,:,2] < 50))
     total_pixels = img_array.shape[0] * img_array.shape[1]
     dark_ratio = dark_pixels / total_pixels
 
     white_pixels = np.sum((img_array[:,:,0] > 200) & 
-                    (img_array[:,:,1] > 200) & 
-                    (img_array[:,:,2] > 200))
+                   (img_array[:,:,1] > 200) & 
+                   (img_array[:,:,2] > 200))
     white_ratio = white_pixels / total_pixels
 
     return dark_ratio > threshold or white_ratio > threshold
@@ -77,13 +76,12 @@ def save_image(image_pil, image_count):
     image_pil.save(img_path, quality=IMAGE_QUALITY, optimize=True)
     return str(img_path)
 
-def resize_image(pil_image,max_pixels=MAX_PIXELS):
+def resize_image(pil_image, max_pixels=MAX_PIXELS):
     org_width, org_height = pil_image.size
     if org_width * org_height > max_pixels:
         scale_factor = (max_pixels / (org_width * org_height)) ** 0.5
         new_width = int(org_width * scale_factor)
         new_height = int(org_height * scale_factor)
-        # Use high-quality resampling
         pil_image = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
     return pil_image
 
@@ -102,7 +100,6 @@ def base64_from_image(img_path):
         st.error(f"Error processing image: {str(e)}")
         return None
 
-# Extracting text and images from pdf
 def extract_pdf(file):
     text = ""
     image_paths = []
@@ -127,7 +124,6 @@ def extract_pdf(file):
         st.error(f"Error processing PDF: {str(e)}")
     return text, image_paths
 
-# Extracting text and images from docs
 def extract_docx(file):
     text = ""
     image_paths = []
@@ -152,7 +148,6 @@ def extract_docx(file):
         st.error(f"Error processing DOCX: {str(e)}")
     return text, image_paths
 
-# Extracting text and images from ppt
 def extract_pptx(file):
     text = ""
     image_paths = []
@@ -163,7 +158,7 @@ def extract_pptx(file):
             for shape in slide.shapes:
                 if hasattr(shape, "text"):
                     text += shape.text + "\n"
-                if shape.shape_type ==13:
+                if shape.shape_type == 13:
                     img_stream = shape.image.blob
                     img_pil = Image.open(io.BytesIO(img_stream))
                     if is_blank_image(img_pil):
@@ -177,40 +172,31 @@ def extract_pptx(file):
         st.error(f"Error processing PPTX: {str(e)}")
     return text, image_paths
 
-# Gemini model
 def ask_gemini(question, context=None, img_path=None):
-    """Query Gemini with optional context and/or image"""
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
         if img_path and context:
             prompt = f"""You are an expert assistant. Analyze the following question using both the image and the provided context if relevant.
-
 * Use the context and image to answer the question with precision.
-
 * If the image or context is not relevant to the question, provide a general answer.
-
 * Keep the response clear, concise, and informative.
-Context: {context}
-Question: {question}"""
+  Context: {context}
+  Question: {question}"""
             img = Image.open(img_path)
             response = model.generate_content([prompt, img])
         elif img_path:
             prompt = f"""You are a knowledgeable assistant. Carefully analyze the provided image to answer the question below.
-
 * Use the image to answer the question only if it's relevant.
-
 * If the image is not related to the question, provide a general and accurate response based on your knowledge.
-
 Question: {question}"""
             img = Image.open(img_path)
             response = model.generate_content([prompt, img])
         elif context:
             prompt = f"""You are an intelligent assistant. Use the following context to answer the question if it's relevant.
-
 * If the context helps, incorporate it into your response.
 * If the question is general or unrelated to the context, answer it independently.
-Context: {context}
-Question: {question}"""
+  Context: {context}
+  Question: {question}"""
             response = model.generate_content(prompt)
         else:
             response = model.generate_content(question)
@@ -218,19 +204,15 @@ Question: {question}"""
     except Exception as e:
         return f"Error querying Gemini: {str(e)}"
 
-# Tavily: for web search results
-def search_tavily(query,search_depth='advanced',max_results=5):
-    """Search the web using Tavily with enhanced parameters"""
+def search_tavily(query, search_depth='advanced', max_results=5):
     try:
-        response = tavily.search(query=query, include_answer=True, include_raw_content=True,include_sources=True,max_results=max_results,search_depth=search_depth)
+        response = tavily.search(query=query, include_answer=True, include_raw_content=True, include_sources=True, max_results=max_results, search_depth=search_depth)
         return response
     except Exception as e:
         st.error(f"Error searching with Tavily: {str(e)}")
         return None
 
-# Groq for general chat
 def ask_groq(question, context=None):
-    """Query Groq with optional context"""
     try:
         messages = []
         if context:
@@ -255,6 +237,7 @@ def ask_groq(question, context=None):
 # Streamlit UI
 st.set_page_config(page_title="Document Q&A", layout="wide")
 st.title("📄 Document Q&A with Image Analysis")
+
 if 'text_chat_history' not in st.session_state:
     st.session_state.text_chat_history = []
 if 'image_chat_history' not in st.session_state:
@@ -275,7 +258,6 @@ with st.expander("Upload Document", expanded=True):
     uploaded_file = st.file_uploader("Choose a file", type=SUPPORTED_TYPES, key="file_uploader")
 
 if uploaded_file != st.session_state.prev_uploaded_file:
-    # Clear previous content
     st.session_state.processed = False
     st.session_state.text = ""
     st.session_state.image_paths = []
@@ -328,9 +310,26 @@ with tab1:
     if st.session_state.processed:
         with st.expander("View Extracted Text"):
             st.text_area("Extracted Text", st.session_state.text, height=200, label_visibility="collapsed")
+        
         text_chat_container = st.container()
-        user_text_input = st.text_input("Ask about the text content:", key="text_input", label_visibility="collapsed")
-        text_send_button = st.button("Send", key="text_send")
+        
+        # Input box and Send button in columns
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            user_text_input = st.text_input(
+                "Ask about the text content:", 
+                key="text_input", 
+                placeholder="Type your question here...",
+                label_visibility="collapsed",
+                disabled=not st.session_state.processed
+            )
+        with col2:
+            text_send_button = st.button(
+                "Send", 
+                key="text_send",
+                disabled=not st.session_state.processed
+            )
+        
         if text_send_button and user_text_input:
             st.session_state.text_chat_history.append(HumanMessage(content=user_text_input))
             if user_text_input.lower() == 'close the chat':
@@ -340,12 +339,13 @@ with tab1:
                 st.session_state.text_chat_history.append(AIMessage(content=answer))
                 st.session_state.scroll = True
                 st.rerun()
+        
         render_chat(text_chat_container, st.session_state.text_chat_history)
+    else:
+        st.info("Upload and process a document to enable text analysis.")
 
 with tab2:
     st.subheader("Image Analysis")
-
-    # Image selection and display at the top
     img_col, _ = st.columns([1, 3])
     with img_col:
         if st.session_state.selected_img:
@@ -396,7 +396,6 @@ with tab2:
             )
             image_send_button = st.button("Send", key="image_send", disabled=not st.session_state.selected_img)
         
-        # Handle user input and generate responses
         if image_send_button and user_image_input:
             st.session_state.image_chat_history.append(HumanMessage(content=user_image_input))
             if user_image_input.lower() == 'close the chat':
@@ -428,11 +427,11 @@ with tab2:
                     with cols[col_idx]:
                         try:
                             img = Image.open(img_path)
-                            if not is_blank_image(img):  # Only display non-blank images
+                            if not is_blank_image(img):
                                 st.image(img, use_container_width=True, output_format="PNG")
                                 if st.button(f"Select {img_idx+1}", key=f"btn_{img_idx}"):
                                     st.session_state.selected_img = img_path
-                                    st.session_state.image_chat_history = []  # Clear chat when new image selected
+                                    st.session_state.image_chat_history = []
                                     st.rerun()
                         except Exception as e:
                             st.error(f"Error loading image: {str(e)}")
@@ -441,7 +440,6 @@ with tab2:
 
 with tab3:
     st.subheader("General Chat")
-
     if 'first_load_done' not in st.session_state:
         st.session_state.first_load_done = True
         st.session_state.chat_history = []
@@ -514,7 +512,6 @@ with tab3:
 Relevant links:
 {relevant_links}
 """
-                        # Generate final answer with search context
                         if use_groq:
                             final_answer = ask_groq(
                                 f"Conversation history:\n{conversation_context}\n\n"
