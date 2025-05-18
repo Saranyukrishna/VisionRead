@@ -461,15 +461,17 @@ with tab2:
 with tab3:
     st.subheader("General Chat")
 
-    # Initialize session state
+    # Initialize session state variables
     if 'general_chat_history' not in st.session_state:
         st.session_state.general_chat_history = []
     if 'last_question' not in st.session_state:
         st.session_state.last_question = ""
     if 'pending_question' not in st.session_state:
         st.session_state.pending_question = None
+    if 'chat_input' not in st.session_state:
+        st.session_state.chat_input = ""
 
-    # Configuration toggles
+    # Settings toggles
     col1, col2, col3 = st.columns(3)
     with col1:
         use_groq = st.toggle("Use Groq (ultra fast)", value=True, key="groq_toggle")
@@ -480,36 +482,40 @@ with tab3:
             st.session_state.general_chat_history = []
             st.session_state.last_question = ""
             st.session_state.pending_question = None
+            st.session_state.chat_input = ""
             st.rerun()
 
-    # Display chat messages
+    # Show previous chat
     chat_container = st.container(height=400)
     render_chat(chat_container, st.session_state.general_chat_history)
 
-    # Text input + Send
-    user_input = st.text_input("Ask any question:", key="chat_input", label_visibility="collapsed")
+    # Chat input + Send
+    user_input = st.text_input(
+        "Ask any question:",
+        key="chat_input",
+        placeholder="Type your question here...",
+        label_visibility="collapsed"
+    )
     send_clicked = st.button("Send")
 
-    # Handle submission
+    # Submit logic
     if send_clicked and user_input.strip() and user_input != st.session_state.last_question:
         st.session_state.pending_question = user_input.strip()
         st.session_state.last_question = user_input.strip()
-        st.session_state["chat_input"] = ""  # Clear input field
-        st.rerun()
+        st.rerun()  # Will reset and process pending question
 
-    # Process pending question
+    # Process after rerun
     if st.session_state.pending_question:
         question = st.session_state.pending_question
+        st.session_state.pending_question = None
         st.session_state.general_chat_history.append(HumanMessage(content=question))
-        st.session_state.pending_question = None  # Reset
 
         with st.spinner("Generating response..."):
             try:
-                # Context window
-                recent_messages = st.session_state.general_chat_history[-4:]
+                # Prepare recent context
                 context = "\n".join(
                     f"{'User' if isinstance(msg, HumanMessage) else 'Assistant'}: {msg.content}"
-                    for msg in recent_messages
+                    for msg in st.session_state.general_chat_history[-4:]
                 )
 
                 prompt = f"""New question: {question}
@@ -520,10 +526,10 @@ Previous conversation context:
 Please provide a fresh, concise response to the new question above. 
 If you need more information, say so explicitly."""
 
-                # Get initial answer
+                # Model selection
                 initial_answer = ask_groq(prompt) if use_groq else ask_gemini(prompt)
 
-                # Check if follow-up search is needed
+                # Should search?
                 uncertainty_phrases = [
                     "i don't know", "not sure", "as of my knowledge",
                     "as of my last update", "i don't have information",
@@ -531,16 +537,16 @@ If you need more information, say so explicitly."""
                 ]
                 needs_search = enable_search and any(p in initial_answer.lower() for p in uncertainty_phrases)
 
+                # Web enhancement if needed
                 if needs_search:
                     with st.spinner("Searching for current information..."):
                         search_results = search_tavily(question)
 
-                        if search_results and search_results.get('results'):
+                        if search_results and search_results.get("results"):
                             links_md = "\n".join(
                                 f"- [{r['title']}]({r['url']})"
-                                for r in search_results['results'][:3]
+                                for r in search_results["results"][:3]
                             )
-
                             enhancement_prompt = f"""Original question: {question}
 
 Initial response: {initial_answer}
@@ -555,15 +561,15 @@ Please provide an improved answer incorporating this new information when releva
 Always cite sources using markdown links when using specific information."""
 
                             final_answer = ask_groq(enhancement_prompt) if use_groq else ask_gemini(enhancement_prompt)
-
                             full_answer = f"{initial_answer}\n\n---\n\n**Updated Information**:\n{final_answer}"
                         else:
                             full_answer = f"{initial_answer}\n\n(Web search didn't find additional information)"
                 else:
                     full_answer = initial_answer
 
-                # Add final AI message
+                # Append answer
                 st.session_state.general_chat_history.append(AIMessage(content=full_answer))
+                st.session_state.chat_input = ""  # Clear safely on next run
                 st.rerun()
 
             except Exception as e:
