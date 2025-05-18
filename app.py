@@ -84,8 +84,8 @@ def is_blank_image(pil_image, threshold=BLANK_IMAGE_THRESHOLD):
         dark_ratio = dark_pixels / total_pixels
 
         white_pixels = np.sum((img_array[:,:,0] > 200) & 
-                             (img_array[:,:,1] > 200) & 
-                             (img_array[:,:,2] > 200))
+                         (img_array[:,:,1] > 200) & 
+                         (img_array[:,:,2] > 200))
         white_ratio = white_pixels / total_pixels
 
         return dark_ratio > threshold or white_ratio > threshold
@@ -94,13 +94,13 @@ def is_blank_image(pil_image, threshold=BLANK_IMAGE_THRESHOLD):
         return False
 
 @st.cache_data(show_spinner=False)
-def save_image(image_pil, image_count):
+def save_image(_image_pil, image_count):  # Note the underscore prefix for _image_pil
     try:
         IMAGES_DIR.mkdir(parents=True, exist_ok=True)
         img_path = IMAGES_DIR / f"image_{image_count}.png"
-        if image_pil.mode in ('RGBA', 'LA'):
-            image_pil = image_pil.convert('RGB')
-        image_pil.save(img_path, quality=IMAGE_QUALITY, optimize=True)
+        if _image_pil.mode in ('RGBA', 'LA'):
+            _image_pil = _image_pil.convert('RGB')
+        _image_pil.save(img_path, quality=IMAGE_QUALITY, optimize=True)
         return str(img_path)
     except Exception as e:
         st.error(f"Error saving image: {str(e)}")
