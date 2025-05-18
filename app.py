@@ -347,20 +347,68 @@ tab1, tab2, tab3 = st.tabs(["📝 Text Analysis", "🖼️ Image Analysis", "�
 
 with tab1:
     st.subheader("Text Analysis")
-    if st.session_state.processed:
+
+    # Initialize session state variables
+    if "text_chat_history" not in st.session_state:
+        st.session_state.text_chat_history = []
+    if "last_text_question" not in st.session_state:
+        st.session_state.last_text_question = ""
+
+    # Configuration toggles
+    col1, col2 = st.columns(2)
+    with col1:
+        use_groq_text = st.toggle("Use Groq (ultra fast)", value=True, key="groq_text_toggle")
+    with col2:
+        if st.button("Clear Chat", key="clear_text_chat"):
+            st.session_state.text_chat_history = []
+            st.session_state.last_text_question = ""
+            st.rerun()
+
+    # Display extracted text
+    if st.session_state.get("processed", False):
         with st.expander("View Extracted Text"):
             st.text_area("Extracted Text", st.session_state.text, height=200, label_visibility="collapsed")
-        
-        text_chat_container = st.container()
-        user_text_input = st.text_input("Ask about the text content:", key="text_input", label_visibility="collapsed")
-        
-        if st.button("Send", key="text_send") and user_text_input:
-            st.session_state.text_chat_history.append(HumanMessage(content=user_text_input))
-            with st.spinner("Analyzing text..."):
-                answer = ask_gemini(user_text_input, context=st.session_state.text)
-                st.session_state.text_chat_history.append(AIMessage(content=answer))
-        
+
+        # Display chat history
+        text_chat_container = st.container(height=400)
         render_chat(text_chat_container, st.session_state.text_chat_history)
+
+        # Chat input
+        user_text_input = st.chat_input("Ask about the text content...")
+
+        # Handle submission
+        if user_text_input and user_text_input != st.session_state.last_text_question:
+            st.session_state.last_text_question = user_text_input
+            st.session_state.text_chat_history.append(HumanMessage(content=user_text_input))
+
+            with st.spinner("Analyzing text..."):
+                try:
+                    context = "\n".join(
+                        f"{'User' if isinstance(m, HumanMessage) else 'Assistant'}: {m.content}"
+                        for m in st.session_state.text_chat_history[-4:]
+                    )
+
+                    prompt = f"""Text-based question: {user_text_input}
+
+Extracted document context:
+{st.session_state.text}
+
+Previous chat context:
+{context if context else 'No previous context'}
+
+Respond clearly and concisely using the text content above."""
+
+                    response = ask_groq(prompt) if use_groq_text else ask_gemini(prompt)
+
+                    st.session_state.text_chat_history.append(AIMessage(content=response))
+                    st.rerun()
+
+                except Exception as e:
+                    st.session_state.text_chat_history.append(
+                        AIMessage(content=f"⚠️ Error: {str(e)}")
+                    )
+                    st.rerun()
+
 
 
 
