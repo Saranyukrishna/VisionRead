@@ -354,13 +354,18 @@ with tab1:
             st.text_area("Extracted Text", st.session_state.text, height=200, label_visibility="collapsed")
         
         text_chat_container = st.container()
-        user_text_input = st.text_input("Ask about the text content:", key="text_input", label_visibility="collapsed")
+        
+        # Use a counter to force new input key and clear input on send
+        if "input_counter" not in st.session_state:
+            st.session_state.input_counter = 0
+        
+        input_key = f"text_input_{st.session_state.input_counter}"
+        
+        user_text_input = st.text_input("Ask about the text content:", key=input_key, label_visibility="collapsed")
         send_button = st.button("Send", key="text_send")
         
         if send_button and user_text_input:
             st.session_state.text_chat_history.append(HumanMessage(content=user_text_input))
-            # Clear input to prevent repeats
-            st.session_state["text_input"] = ""
             
             with st.spinner("Analyzing text..."):
                 try:
@@ -369,10 +374,12 @@ with tab1:
                     answer = f"⚠️ Error: {e}"
                 
                 st.session_state.text_chat_history.append(AIMessage(content=answer))
-            st.experimental_rerun()  # rerun to update UI immediately
+            
+            # Increment counter to clear input by changing input key on rerun
+            st.session_state.input_counter += 1
+            st.experimental_rerun()  # force rerun to update UI immediately
         
         render_chat(text_chat_container, st.session_state.text_chat_history)
-
 
 
 with tab2:
