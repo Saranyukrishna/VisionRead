@@ -346,40 +346,68 @@ tab1, tab2, tab3 = st.tabs(["📝 Text Analysis", "🖼️ Image Analysis", "�
 
 with tab1:
     st.subheader("Text Analysis")
-    
+
     if not st.session_state.get("processed", False):
         st.info("Please upload or process text before starting the analysis.")
     else:
-        with st.expander("View Extracted Text"):
-            st.text_area("Extracted Text", st.session_state.text, height=200, label_visibility="collapsed")
-        
+        # No longer showing full extracted text to reduce tokens
+        # You can add a summary or small snippet if desired here
+
         text_chat_container = st.container()
-        
-        # Use a counter to force new input key and clear input on send
+
+        # Initialize counters and flags for input management
         if "input_counter" not in st.session_state:
             st.session_state.input_counter = 0
-        
+        if "processing_message" not in st.session_state:
+            st.session_state.processing_message = False
+        if "text_chat_history" not in st.session_state:
+            st.session_state.text_chat_history = []
+
         input_key = f"text_input_{st.session_state.input_counter}"
-        
         user_text_input = st.text_input("Ask about the text content:", key=input_key, label_visibility="collapsed")
         send_button = st.button("Send", key="text_send")
-        
-        if send_button and user_text_input:
+
+        if send_button and user_text_input and not st.session_state.processing_message:
+            st.session_state.processing_message = True
             st.session_state.text_chat_history.append(HumanMessage(content=user_text_input))
-            
+
             with st.spinner("Analyzing text..."):
                 try:
-                    answer = ask_groq(user_text_input, context=st.session_state.text)
+                    # Trim large text context to avoid Groq token limit
+                    max_context_chars = 2000
+                    full_text = st.session_state.text if "text" in st.session_state else ""
+                    truncated_text = (full_text[:max_context_chars] + '...') if len(full_text) > max_context_chars else full_text
+
+                    # Limit conversation history length to last 2 messages for context
+                    conversation_context = "\n".join(
+                        f"{'User' if isinstance(msg, HumanMessage) else 'Assistant'}: {msg.content}"
+                        for msg in st.session_state.text_chat_history[-2:]
+                    )
+
+                    prompt = f"""New question: {user_text_input}
+
+Context:
+{truncated_text}
+
+Previous conversation:
+{conversation_context if conversation_context else 'No previous context'}
+
+Please provide a concise and accurate response."""
+
+                    # Use Groq for faster responses
+                    answer = ask_groq(prompt)
+
                 except Exception as e:
-                    answer = f"⚠️ Error: {e}"
-                
+                    answer = f" Error: {e}"
+
                 st.session_state.text_chat_history.append(AIMessage(content=answer))
-            
-            # Increment counter to clear input by changing input key on rerun
+
             st.session_state.input_counter += 1
-            st.experimental_rerun()  # force rerun to update UI immediately
-        
+            st.session_state.processing_message = False
+            st.experimental_rerun()
+
         render_chat(text_chat_container, st.session_state.text_chat_history)
+
 
 
 with tab2:
