@@ -464,67 +464,72 @@ with tab3:
     # Configuration options
     col1, col2 = st.columns(2)
     with col1:
-        use_groq = st.toggle("Use Groq (faster)", value=True)
+        use_groq = st.toggle("Use Groq (faster)", value=True, key="groq_toggle")
     with col2:
-        enable_search = st.toggle("Enable web search", value=True)
+        enable_search = st.toggle("Enable web search", value=True, key="search_toggle")
     
     # Display chat history
     general_chat_container = st.container()
     render_chat(general_chat_container, st.session_state.general_chat_history)
     
-    # Input area with proper state management
+    # Input area with unique key based on chat history length
+    input_key = f"general_input_{len(st.session_state.general_chat_history)}"
     user_input = st.text_input(
         "Ask any question:", 
-        key="general_input",
+        key=input_key,
         placeholder="Type your question and press Send",
         label_visibility="collapsed"
     )
     
-    send_button = st.button("Send", key="general_send")
+    # Send button with state tracking
+    if 'last_question' not in st.session_state:
+        st.session_state.last_question = ""
     
-    if send_button and user_input:
-        # Add user message to history immediately
+    send_button = st.button("Send", key=f"send_{len(st.session_state.general_chat_history)}")
+    
+    if send_button and user_input and user_input != st.session_state.last_question:
+        # Update last question tracker
+        st.session_state.last_question = user_input
+        
+        # Add user message to history
         st.session_state.general_chat_history.append(HumanMessage(content=user_input))
         
-        # Clear the input field by forcing a rerun
-        st.session_state.general_input = ""
+        # Clear the input by forcing a rerun
         st.rerun()
         
         with st.spinner("Thinking..."):
             # Prepare conversation context
             conversation_context = "\n".join(
                 f"User: {msg.content}" if isinstance(msg, HumanMessage) else f"Assistant: {msg.content}"
-                for msg in st.session_state.general_chat_history[-6:]  # Reduced for performance
+                for msg in st.session_state.general_chat_history[-6:]
             )
             
             try:
                 # Generate initial answer
                 if use_groq:
                     initial_answer = ask_groq(
-                        f"""Conversation history (most recent first):
+                        f"""Conversation context:
 {conversation_context}
 
 New question: {user_input}
 
-Please provide a helpful and accurate response. If you're uncertain, say so."""
+Please provide a fresh response to this new question."""
                     )
                 else:
                     initial_answer = ask_gemini(
-                        f"""Conversation history (most recent first):
+                        f"""Conversation context:
 {conversation_context}
 
 New question: {user_input}
 
-Please provide a helpful and accurate response. If you're uncertain, say so."""
+Please provide a fresh response to this new question."""
                     )
                 
                 # Check if we should do a web search
                 needs_search = (
                     enable_search and 
-                    ("I don't know" in initial_answer or 
-                     "not sure" in initial_answer or
-                     "as of my knowledge" in initial_answer.lower() or
-                     "as of my last update" in initial_answer.lower())
+                    any(phrase in initial_answer.lower() 
+                        for phrase in ["i don't know", "not sure", "as of my knowledge", "as of my last update"])
                 )
                 
                 if needs_search:
@@ -532,42 +537,30 @@ Please provide a helpful and accurate response. If you're uncertain, say so."""
                         search_results = search_tavily(user_input)
                         
                         if search_results and search_results.get('results'):
-                            # Format search results
                             relevant_links = "\n".join(
                                 f"- [{result['title']}]({result['url']})" 
                                 for result in search_results['results'][:3]
                             )
                             
-                            search_context = f"""Web search results:
-{search_results.get('answer', 'No summary available')}
-
-Relevant sources:
-{relevant_links}"""
-                            
-                            # Generate enhanced answer
                             if use_groq:
                                 final_answer = ask_groq(
-                                    f"""Original question: {user_input}
+                                    f"""Question: {user_input}
+                                    
+Search results:
+{search_results.get('answer', '')}
 
-Initial answer: {initial_answer}
-
-Additional context from web search:
-{search_context}
-
-Please provide an improved answer using this new information. 
-Cite sources when appropriate using markdown links."""
+Please provide a comprehensive answer using these sources:
+{relevant_links}"""
                                 )
                             else:
                                 final_answer = ask_gemini(
-                                    f"""Original question: {user_input}
+                                    f"""Question: {user_input}
+                                    
+Search results:
+{search_results.get('answer', '')}
 
-Initial answer: {initial_answer}
-
-Additional context from web search:
-{search_context}
-
-Please provide an improved answer using this new information. 
-Cite sources when appropriate using markdown links."""
+Please provide a comprehensive answer using these sources:
+{relevant_links}"""
                                 )
                             
                             answer = f"{initial_answer}\n\n---\n\n**Updated Information**:\n{final_answer}"
@@ -578,14 +571,12 @@ Cite sources when appropriate using markdown links."""
                 
                 # Add final answer to history
                 st.session_state.general_chat_history.append(AIMessage(content=answer))
-                
-                # Force update the display
                 st.rerun()
             
             except Exception as e:
                 st.error(f"Error generating response: {str(e)}")
                 st.session_state.general_chat_history.append(
-                    AIMessage(content="Sorry, I encountered an error processing your request. Please try again.")
+                    AIMessage(content="Sorry, I encountered an error. Please try again.")
                 )
                 st.rerun()
 
