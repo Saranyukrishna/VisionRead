@@ -346,7 +346,16 @@ tab1, tab2, tab3 = st.tabs(["📝 Text Analysis", "🖼️ Image Analysis", "�
 
 with tab1:
     st.subheader("Text Analysis")
-    if st.session_state.processed:
+    
+    if not st.session_state.get("processed", False):
+        st.text_area(
+            "Enter or paste text for analysis:",
+            key="raw_text_input",
+            height=200,
+            label_visibility="visible"
+        )
+        st.info("Please process or upload text to continue.")
+    else:
         with st.expander("View Extracted Text"):
             st.text_area("Extracted Text", st.session_state.text, height=200, label_visibility="collapsed")
         
