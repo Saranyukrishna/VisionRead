@@ -93,19 +93,28 @@ def is_blank_image(pil_image, threshold=BLANK_IMAGE_THRESHOLD):
         st.warning(f"Blank image check failed: {str(e)}")
         return False
 
-@st.cache_data(show_spinner=False)
-def save_image(_image_pil, image_count):  # Note the underscore prefix for _image_pil
+@st.cache_data(show_spinner=False, hash_funcs={Image.Image: lambda _: None})
+def save_image(_image_pil, image_count):
     try:
         IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-        img_path = IMAGES_DIR / f"image_{image_count}.png"
-        if _image_pil.mode in ('RGBA', 'LA'):
+        img_path = IMAGES_DIR / f"image_{image_count:04d}.png"
+        
+        if _image_pil.mode in ('RGBA', 'LA', 'P'):
             _image_pil = _image_pil.convert('RGB')
-        _image_pil.save(img_path, quality=IMAGE_QUALITY, optimize=True)
-        return str(img_path)
+        
+        _image_pil.save(
+            img_path,
+            format="PNG",
+            quality=IMAGE_QUALITY,
+            optimize=True,
+            compress_level=6
+        )
+        
+        return str(img_path.resolve())
+    
     except Exception as e:
-        st.error(f"Error saving image: {str(e)}")
+        st.error(f"Error saving image {image_count}: {str(e)}")
         return None
-
 def resize_image(pil_image, max_pixels=MAX_PIXELS):
     try:
         org_width, org_height = pil_image.size
