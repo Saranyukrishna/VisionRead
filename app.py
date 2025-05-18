@@ -68,6 +68,8 @@ def cleanup():
     if OUTPUT_DIR.exists():
         try:
             shutil.rmtree(OUTPUT_DIR)
+            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            IMAGES_DIR.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             st.warning(f"Cleanup warning: {str(e)}")
 
@@ -346,6 +348,13 @@ with st.expander("Upload Document", expanded=True):
 # Process document when uploaded
 if uploaded_file and uploaded_file != st.session_state.prev_uploaded_file:
     with st.spinner("Processing document..."):
+        # Clear previous images and text
+        st.session_state.text = ""
+        st.session_state.image_paths = []
+        st.session_state.selected_img = None
+        cleanup()  # Remove all temporary files
+        
+        # Process new document
         st.session_state.text, st.session_state.image_paths = process_document(uploaded_file)
         if st.session_state.text is not None:
             st.session_state.processed = True
@@ -455,7 +464,7 @@ with tab2:
                 except Exception as e:
                     st.error(f"Error loading selected image: {str(e)}")
             else:
-                st.info("No image selected")
+                st.info("Select an image from below to analyze")
         
         if st.session_state.selected_img:
             image_chat_container = st.container()
@@ -492,7 +501,7 @@ with tab2:
         
         if st.session_state.image_paths:
             st.divider()
-            st.write("Select an image to analyze:")
+            st.write("Document Images:")
             num_cols = 4
             image_paths = st.session_state.image_paths
             rows = (len(image_paths) + num_cols - 1) // num_cols
@@ -508,7 +517,7 @@ with tab2:
                                 img = Image.open(img_path)
                                 if not is_blank_image(img):  # Only display non-blank images
                                     st.image(img, use_container_width=True, output_format="PNG")
-                                    if st.button(f"Select {img_idx+1}", key=f"btn_{img_idx}"):
+                                    if st.button(f"Select Image {img_idx+1}", key=f"btn_{img_idx}"):
                                         st.session_state.selected_img = img_path
                                         st.session_state.image_chat_history = []  # Clear chat when new image selected
                                         st.rerun()
