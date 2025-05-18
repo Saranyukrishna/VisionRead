@@ -1,0 +1,14 @@
+streamlit
+python-docx
+python-pptx
+PyMuPDF
+Pillow
+numpy
+cohere
+google-generativeai
+python-dotenv
+requests
+groq
+langchain
+tavily-python
+
