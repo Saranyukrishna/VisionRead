@@ -63,8 +63,8 @@ def is_blank_image(pil_image, threshold=BLANK_IMAGE_THRESHOLD):
     dark_ratio = dark_pixels / total_pixels
 
     white_pixels = np.sum((img_array[:,:,0] > 200) & 
-                     (img_array[:,:,1] > 200) & 
-                     (img_array[:,:,2] > 200))
+                    (img_array[:,:,1] > 200) & 
+                    (img_array[:,:,2] > 200))
     white_ratio = white_pixels / total_pixels
 
     return dark_ratio > threshold or white_ratio > threshold
@@ -127,7 +127,7 @@ def extract_pdf(file):
         st.error(f"Error processing PDF: {str(e)}")
     return text, image_paths
 
-# Extracting text and images from docx
+# Extracting text and images from docs
 def extract_docx(file):
     text = ""
     image_paths = []
@@ -218,7 +218,7 @@ Question: {question}"""
     except Exception as e:
         return f"Error querying Gemini: {str(e)}"
 
-# Tavily for web search results
+# Tavily: for web search results
 def search_tavily(query,search_depth='advanced',max_results=5):
     """Search the web using Tavily with enhanced parameters"""
     try:
@@ -535,7 +535,7 @@ Relevant links:
                         answer = (f"{initial_answer}\n\n"
                                   f"I found some updated information:\n{final_answer}")
                     else:
-                        answer = f"{initial_answer}\n\nWeb search failed to find additional information."
+                        answer = f"{initial_answer}\n\n  Web search failed to find additional information."
             else:
                 answer = initial_answer
             st.session_state.chat_history.append(AIMessage(content=answer))
