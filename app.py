@@ -344,7 +344,6 @@ if uploaded_file and uploaded_file != st.session_state.prev_uploaded_file:
 # Tabs interface
 tab1, tab2, tab3 = st.tabs(["📝 Text Analysis", "🖼️ Image Analysis", "💬 General Chat"])
 
-
 with tab1:
     st.subheader("Text Analysis")
 
@@ -354,29 +353,25 @@ with tab1:
     if "last_text_question" not in st.session_state:
         st.session_state.last_text_question = ""
 
-    # Configuration toggles
-    col1, col2 = st.columns(2)
-    with col1:
-        use_groq_text = st.toggle("Use Groq (ultra fast)", value=True, key="groq_text_toggle")
-    with col2:
-        if st.button("Clear Chat", key="clear_text_chat"):
-            st.session_state.text_chat_history = []
-            st.session_state.last_text_question = ""
-            st.rerun()
+    # Clear chat option
+    if st.button("Clear Chat", key="clear_text_chat"):
+        st.session_state.text_chat_history = []
+        st.session_state.last_text_question = ""
+        st.rerun()
 
     # Display extracted text
     if st.session_state.get("processed", False):
         with st.expander("View Extracted Text"):
             st.text_area("Extracted Text", st.session_state.text, height=200, label_visibility="collapsed")
 
-        # Display chat history
+        # Chat history container
         text_chat_container = st.container(height=400)
         render_chat(text_chat_container, st.session_state.text_chat_history)
 
-        # Chat input
+        # User chat input
         user_text_input = st.chat_input("Ask about the text content...")
 
-        # Handle submission
+        # Handle new question
         if user_text_input and user_text_input != st.session_state.last_text_question:
             st.session_state.last_text_question = user_text_input
             st.session_state.text_chat_history.append(HumanMessage(content=user_text_input))
@@ -388,19 +383,18 @@ with tab1:
                         for m in st.session_state.text_chat_history[-4:]
                     )
 
-                    prompt = f"""Text-based question: {user_text_input}
+                    prompt = f"""Question: {user_text_input}
 
-Extracted document context:
+Extracted Text:
 {st.session_state.text}
 
-Previous chat context:
-{context if context else 'No previous context'}
+Chat Context:
+{context if context else 'No previous chat context'}
 
-Respond clearly and concisely using the text content above."""
+Please answer the question using the text above. If the answer cannot be found, say so clearly."""
 
-                    response = ask_groq(prompt) if use_groq_text else ask_gemini(prompt)
-
-                    st.session_state.text_chat_history.append(AIMessage(content=response))
+                    answer = ask_gemini(prompt)
+                    st.session_state.text_chat_history.append(AIMessage(content=answer))
                     st.rerun()
 
                 except Exception as e:
@@ -408,9 +402,6 @@ Respond clearly and concisely using the text content above."""
                         AIMessage(content=f"⚠️ Error: {str(e)}")
                     )
                     st.rerun()
-
-
-
 
 
 with tab2:
