@@ -58,6 +58,7 @@ BLANK_IMAGE_THRESHOLD = 0.95
 def setup_directories():
     OUTPUT_DIR = Path(tempfile.mkdtemp())
     IMAGES_DIR = OUTPUT_DIR / "images"
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)  # Ensure images directory exists
     TEXT_FILE = OUTPUT_DIR / "extracted_text.txt"
     return OUTPUT_DIR, IMAGES_DIR, TEXT_FILE
 
@@ -68,6 +69,7 @@ def cleanup():
     if OUTPUT_DIR.exists():
         try:
             shutil.rmtree(OUTPUT_DIR)
+            # Recreate the directory structure
             OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             IMAGES_DIR.mkdir(parents=True, exist_ok=True)
         except Exception as e:
@@ -95,10 +97,11 @@ def is_blank_image(pil_image, threshold=BLANK_IMAGE_THRESHOLD):
         st.warning(f"Blank image check failed: {str(e)}")
         return False
 
-@st.cache_data(show_spinner=False, hash_funcs={Image.Image: lambda _: None})
 def save_image(_image_pil, image_count):
     try:
-        IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+        if not IMAGES_DIR.exists():
+            IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+            
         img_path = IMAGES_DIR / f"image_{image_count:04d}.png"
         
         if _image_pil.mode in ('RGBA', 'LA', 'P'):
@@ -133,6 +136,9 @@ def resize_image(pil_image, max_pixels=MAX_PIXELS):
 
 def base64_from_image(img_path):
     try:
+        if not Path(img_path).exists():
+            return None
+            
         pil_image = Image.open(img_path)
         img_format = pil_image.format or "PNG"
         if pil_image.mode in ('RGBA', 'LA'):
@@ -146,8 +152,7 @@ def base64_from_image(img_path):
         st.error(f"Error processing image: {str(e)}")
         return None
 
-# Document processing functions with caching
-@st.cache_data(show_spinner="Extracting content...", persist=True)
+# Document processing functions
 def process_document(uploaded_file):
     text = ""
     image_paths = []
@@ -348,11 +353,11 @@ with st.expander("Upload Document", expanded=True):
 # Process document when uploaded
 if uploaded_file and uploaded_file != st.session_state.prev_uploaded_file:
     with st.spinner("Processing document..."):
-        # Clear previous images and text
+        # Clear previous state
         st.session_state.text = ""
         st.session_state.image_paths = []
         st.session_state.selected_img = None
-        cleanup()  # Remove all temporary files
+        cleanup()
         
         # Process new document
         st.session_state.text, st.session_state.image_paths = process_document(uploaded_file)
@@ -437,36 +442,40 @@ with tab2:
         with img_col:
             if st.session_state.selected_img:
                 try:
-                    selected_img = Image.open(st.session_state.selected_img)
-                    
-                    with st.expander("Image Enhancement Options"):
-                        enhance = st.checkbox("Enhance Image Quality", value=True)
-                        contrast = st.slider("Adjust Contrast", 0.5, 2.0, 1.0)
-                        sharpness = st.slider("Adjust Sharpness", 0.0, 2.0, 1.0)
+                    if Path(st.session_state.selected_img).exists():
+                        selected_img = Image.open(st.session_state.selected_img)
                         
-                        if enhance:
-                            enhancer = ImageEnhance.Contrast(selected_img)
-                            selected_img = enhancer.enhance(contrast)
-                            enhancer = ImageEnhance.Sharpness(selected_img)
-                            selected_img = enhancer.enhance(sharpness)
-                    st.image(selected_img, 
-                             caption="Selected Image", 
-                             use_container_width=True,
-                             output_format="PNG")
-                    with io.BytesIO() as buffer:
-                        selected_img.save(buffer, format="PNG", quality=IMAGE_QUALITY)
-                        st.download_button(
-                            label="Download Enhanced Image",
-                            data=buffer.getvalue(),
-                            file_name="enhanced_image.png",
-                            mime="image/png"
-                        )
+                        with st.expander("Image Enhancement Options"):
+                            enhance = st.checkbox("Enhance Image Quality", value=True)
+                            contrast = st.slider("Adjust Contrast", 0.5, 2.0, 1.0)
+                            sharpness = st.slider("Adjust Sharpness", 0.0, 2.0, 1.0)
+                            
+                            if enhance:
+                                enhancer = ImageEnhance.Contrast(selected_img)
+                                selected_img = enhancer.enhance(contrast)
+                                enhancer = ImageEnhance.Sharpness(selected_img)
+                                selected_img = enhancer.enhance(sharpness)
+                        st.image(selected_img, 
+                                 caption="Selected Image", 
+                                 use_container_width=True,
+                                 output_format="PNG")
+                        with io.BytesIO() as buffer:
+                            selected_img.save(buffer, format="PNG", quality=IMAGE_QUALITY)
+                            st.download_button(
+                                label="Download Enhanced Image",
+                                data=buffer.getvalue(),
+                                file_name="enhanced_image.png",
+                                mime="image/png"
+                            )
+                    else:
+                        st.warning("Selected image no longer exists")
+                        st.session_state.selected_img = None
                 except Exception as e:
                     st.error(f"Error loading selected image: {str(e)}")
             else:
                 st.info("Select an image from below to analyze")
         
-        if st.session_state.selected_img:
+        if st.session_state.selected_img and Path(st.session_state.selected_img).exists():
             image_chat_container = st.container()
             render_chat(image_chat_container, st.session_state.image_chat_history)
         
@@ -496,33 +505,34 @@ with tab2:
                         context=st.session_state.text
                     )
                     st.session_state.image_chat_history.append(AIMessage(content=answer))
-                    st.session_state.scroll = True
                     st.rerun()
         
         if st.session_state.image_paths:
             st.divider()
             st.write("Document Images:")
             num_cols = 4
-            image_paths = st.session_state.image_paths
-            rows = (len(image_paths) + num_cols - 1) // num_cols
+            valid_image_paths = [p for p in st.session_state.image_paths if Path(p).exists()]
+            rows = (len(valid_image_paths) + num_cols - 1) // num_cols
             
             for row in range(rows):
                 cols = st.columns(num_cols)
                 for col_idx in range(num_cols):
                     img_idx = row * num_cols + col_idx
-                    if img_idx < len(image_paths):
-                        img_path = image_paths[img_idx]
+                    if img_idx < len(valid_image_paths):
+                        img_path = valid_image_paths[img_idx]
                         with cols[col_idx]:
                             try:
                                 img = Image.open(img_path)
-                                if not is_blank_image(img):  # Only display non-blank images
+                                if not is_blank_image(img):
                                     st.image(img, use_container_width=True, output_format="PNG")
                                     if st.button(f"Select Image {img_idx+1}", key=f"btn_{img_idx}"):
                                         st.session_state.selected_img = img_path
-                                        st.session_state.image_chat_history = []  # Clear chat when new image selected
+                                        st.session_state.image_chat_history = []
                                         st.rerun()
                             except Exception as e:
                                 st.error(f"Error loading image: {str(e)}")
+            if not valid_image_paths:
+                st.warning("No valid images found in the document")
         else:
             st.write("No images found in the document.")
 
@@ -588,7 +598,7 @@ If you need more information, say so explicitly."""
                     st.session_state.general_chat_history.append(
                         AIMessage(content=initial_answer + "\n\n(Searching for updated information...)")
                     )
-                    st.rerun()  # trigger search flow on next run
+                    st.rerun()
                 else:
                     st.session_state.general_chat_history.append(AIMessage(content=initial_answer))
                     st.rerun()
