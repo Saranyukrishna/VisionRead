@@ -350,12 +350,27 @@ with tab1:
     if not st.session_state.get("processed", False):
         st.info("Please upload or process text before starting the analysis.")
     else:
-        # No longer showing full extracted text to reduce tokens
-        # You can add a summary or small snippet if desired here
+        # Assume extracted text is stored in st.session_state.text
+        full_text = st.session_state.text if "text" in st.session_state else ""
+
+        # Split the text into chunks for dropdown (example: 500 chars each)
+        chunk_size = 500
+        text_chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)]
+        
+        # Add an option for the full text as well
+        if len(text_chunks) > 1:
+            text_chunks.insert(0, full_text)
+
+        # Dropdown to select context from extracted text
+        selected_text = st.selectbox(
+            "Select extracted text to use as context:",
+            options=text_chunks,
+            format_func=lambda x: (x[:50] + "..." if len(x) > 50 else x)
+        )
 
         text_chat_container = st.container()
 
-        # Initialize counters and flags for input management
+        # Initialize session state variables if missing
         if "input_counter" not in st.session_state:
             st.session_state.input_counter = 0
         if "processing_message" not in st.session_state:
@@ -364,21 +379,28 @@ with tab1:
             st.session_state.text_chat_history = []
 
         input_key = f"text_input_{st.session_state.input_counter}"
-        user_text_input = st.text_input("Ask about the text content:", key=input_key, label_visibility="collapsed")
-        send_button = st.button("Send", key="text_send")
+
+        # Disable input and button when processing
+        user_text_input = st.text_input(
+            "Ask about the text content:",
+            key=input_key,
+            label_visibility="collapsed",
+            disabled=st.session_state.processing_message,
+        )
+        send_button = st.button("Send", disabled=st.session_state.processing_message)
 
         if send_button and user_text_input and not st.session_state.processing_message:
             st.session_state.processing_message = True
+
             st.session_state.text_chat_history.append(HumanMessage(content=user_text_input))
 
             with st.spinner("Analyzing text..."):
                 try:
-                    # Trim large text context to avoid Groq token limit
                     max_context_chars = 2000
-                    full_text = st.session_state.text if "text" in st.session_state else ""
-                    truncated_text = (full_text[:max_context_chars] + '...') if len(full_text) > max_context_chars else full_text
+                    truncated_context = selected_text
+                    if len(truncated_context) > max_context_chars:
+                        truncated_context = truncated_context[:max_context_chars] + "..."
 
-                    # Limit conversation history length to last 2 messages for context
                     conversation_context = "\n".join(
                         f"{'User' if isinstance(msg, HumanMessage) else 'Assistant'}: {msg.content}"
                         for msg in st.session_state.text_chat_history[-2:]
@@ -387,26 +409,25 @@ with tab1:
                     prompt = f"""New question: {user_text_input}
 
 Context:
-{truncated_text}
+{truncated_context}
 
 Previous conversation:
 {conversation_context if conversation_context else 'No previous context'}
 
 Please provide a concise and accurate response."""
 
-                    # Use Groq for faster responses
                     answer = ask_groq(prompt)
 
                 except Exception as e:
-                    answer = f" Error: {e}"
+                    answer = f"Error: {e}"
 
                 st.session_state.text_chat_history.append(AIMessage(content=answer))
 
             st.session_state.input_counter += 1
             st.session_state.processing_message = False
-            st.experimental_rerun()
 
         render_chat(text_chat_container, st.session_state.text_chat_history)
+
 
 
 
