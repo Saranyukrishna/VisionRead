@@ -285,7 +285,7 @@ def ask_groq(question, context=None):
 
         start_time = time.time()
         response = groq.chat.completions.create(
-            model="llama-8b-8192",
+            model="llama3-8b-8192",
             messages=messages,
             temperature=0.8,
             timeout=30
