@@ -13,7 +13,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 import tempfile
 import shutil
-from langchain.schema import HumanMessage, AIMessage
+from langchain.messages import HumanMessage, AIMessage
 from tavily import TavilyClient
 from groq import Groq
 import time
