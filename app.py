@@ -49,7 +49,7 @@ co, genai, tavily, groq = initialize_clients()
 # Constants
 MAX_PIXELS = 1568 * 1568
 SUPPORTED_TYPES = ["pdf", "docx", "pptx"]
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-1.5-flash-latest"
 IMAGE_QUALITY = 95
 BLANK_IMAGE_THRESHOLD = 0.95
 
